@@ -1,0 +1,64 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "steps": [
+    {
+      "name": "healthcheck",
+      "method": "GET",
+      "path": "/health",
+      "expected_status": 200,
+      "response_contains": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "training-data-summary",
+      "method": "GET",
+      "path": "/training-data/summary",
+      "expected_status": 200,
+      "expected_keys": [
+        "splits"
+      ]
+    },
+    {
+      "name": "predict-quality",
+      "method": "POST",
+      "path": "/predict",
+      "expected_status": 200,
+      "json": {
+        "fixed_acidity": 7.4,
+        "volatile_acidity": 0.7,
+        "citric_acid": 0.0,
+        "residual_sugar": 1.9,
+        "chlorides": 0.076,
+        "free_sulfur_dioxide": 11.0,
+        "total_sulfur_dioxide": 34.0,
+        "density": 0.9978,
+        "ph": 3.51,
+        "sulphates": 0.56,
+        "alcohol": 9.4
+      },
+      "expected_keys": [
+        "predicted_quality",
+        "model_version",
+        "prediction_id",
+        "stored_in_db"
+      ],
+      "response_contains": {
+        "stored_in_db": true
+      }
+    },
+    {
+      "name": "latest-prediction",
+      "method": "GET",
+      "path": "/predictions/latest",
+      "expected_status": 200,
+      "expected_keys": [
+        "prediction_id",
+        "predicted_quality",
+        "model_version",
+        "request_payload",
+        "created_at"
+      ]
+    }
+  ]
+}
