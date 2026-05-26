@@ -33,6 +33,7 @@ pipeline {
         FUNCTIONAL_REPORT = 'functional-test-report.json'
         POSTGRES_HOST_PORT = '15433'
         VAULT_HOST_PORT = '18200'
+        KAFKA_HOST_PORT = '19002'
         API_HOST_PORT = '18000'
     }
 
