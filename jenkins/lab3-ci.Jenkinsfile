@@ -22,7 +22,7 @@ pipeline {
     parameters {
         string(name: 'DOCKER_IMAGE_NAME', defaultValue: 'wine-quality-mlops', description: 'Local image name or registry/repository for Docker Hub push.')
         string(name: 'DOCKER_IMAGE_TAG', defaultValue: '', description: 'Optional Docker image tag. Leave empty to use build-BUILD_NUMBER.')
-        string(name: 'DOCKERHUB_CREDENTIALS_ID', defaultValue: 'dockerhub-credentials', description: 'Jenkins Username/Password credentials ID for Docker Hub login.')
+        string(name: 'DOCKERHUB_CREDENTIALS_ID', defaultValue: 'dockerhub-credentials', description: 'Jenkins Username/Password credentials ID for Docker Hub login. Leave empty to reuse the host Docker login.')
         booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push the API image to Docker Hub after successful validation.')
         booleanParam(name: 'TRIGGER_CD', defaultValue: false, description: 'Trigger the Lab3 CD pipeline after a successful CI run.')
         string(name: 'CD_JOB_NAME', defaultValue: 'DevOpsStudy-Lab3-CD', description: 'Jenkins job name for the Lab3 CD pipeline.')
@@ -184,18 +184,16 @@ docker cp "$containerId`:/app/artifacts/functional-test-report.json" functional-
             }
             steps {
                 script {
-                    withCredentials([
-                        usernamePassword(credentialsId: params.DOCKERHUB_CREDENTIALS_ID, usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_TOKEN')
-                    ]) {
-                        inRepoWorkspace {
-                            powershell '''
+                    def pushScript = '''
 $ErrorActionPreference = 'Stop'
 if ($env:RESOLVED_IMAGE_NAME -notmatch '/') {
     throw 'For Docker Hub push set DOCKER_IMAGE_NAME as username/repository, for example yourname/wine-quality-mlops.'
 }
-$env:DOCKERHUB_TOKEN | docker login --username "$env:DOCKERHUB_USERNAME" --password-stdin
-if ($LASTEXITCODE -ne 0) {
-    throw 'Docker Hub login failed.'
+if ($env:DOCKERHUB_USERNAME -and $env:DOCKERHUB_TOKEN) {
+    $env:DOCKERHUB_TOKEN | docker login --username "$env:DOCKERHUB_USERNAME" --password-stdin
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Docker Hub login failed.'
+    }
 }
 docker push "$env:RESOLVED_IMAGE_NAME`:$env:RESOLVED_IMAGE_TAG"
 if ($LASTEXITCODE -ne 0) {
@@ -210,6 +208,18 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Docker push for latest failed.'
 }
 '''
+                    def dockerhubCredentialsId = params.DOCKERHUB_CREDENTIALS_ID?.trim()
+                    if (dockerhubCredentialsId) {
+                        withCredentials([
+                            usernamePassword(credentialsId: dockerhubCredentialsId, usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_TOKEN')
+                        ]) {
+                            inRepoWorkspace {
+                                powershell pushScript
+                            }
+                        }
+                    } else {
+                        inRepoWorkspace {
+                            powershell pushScript
                         }
                     }
                 }
