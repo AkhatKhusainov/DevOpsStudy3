@@ -29,6 +29,10 @@ pipeline {
     environment {
         LOCAL_API_IMAGE = 'wine-quality-mlops:local'
         FUNCTIONAL_REPORT = 'functional-test-report.json'
+        POSTGRES_HOST_PORT = '26433'
+        VAULT_HOST_PORT = '28201'
+        KAFKA_HOST_PORT = '29092'
+        API_HOST_PORT = '28001'
     }
 
     stages {
@@ -101,7 +105,10 @@ if ("$env:RESOLVED_IMAGE_NAME`:$env:RESOLVED_IMAGE_TAG" -ne $env:LOCAL_API_IMAGE
             steps {
                 script {
                     inRepoWorkspace {
-                        powershell 'docker compose up -d postgres vault kafka api kafka-consumer'
+                        powershell '''
+docker compose down -v --remove-orphans
+docker compose up -d postgres vault kafka api kafka-consumer
+'''
                     }
                 }
             }

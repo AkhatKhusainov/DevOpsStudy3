@@ -29,6 +29,9 @@ pipeline {
     environment {
         LOCAL_API_IMAGE = 'wine-quality-mlops:local'
         FUNCTIONAL_REPORT = 'functional-test-report.json'
+        POSTGRES_HOST_PORT = '25433'
+        VAULT_HOST_PORT = '28200'
+        API_HOST_PORT = '28000'
     }
 
     stages {
@@ -101,7 +104,10 @@ if ("$env:RESOLVED_IMAGE_NAME`:$env:RESOLVED_IMAGE_TAG" -ne $env:LOCAL_API_IMAGE
             steps {
                 script {
                     inRepoWorkspace {
-                        powershell 'docker compose up -d postgres vault api'
+                        powershell '''
+docker compose down -v --remove-orphans
+docker compose up -d postgres vault api
+'''
                     }
                 }
             }
@@ -125,7 +131,7 @@ if ("$env:RESOLVED_IMAGE_NAME`:$env:RESOLVED_IMAGE_TAG" -ne $env:LOCAL_API_IMAGE
 $ErrorActionPreference = 'Stop'
 for ($attempt = 0; $attempt -lt 20; $attempt++) {
     try {
-        $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/health' -UseBasicParsing -TimeoutSec 10
+        $response = Invoke-WebRequest -Uri "http://127.0.0.1:$env:API_HOST_PORT/health" -UseBasicParsing -TimeoutSec 10
         if ($response.StatusCode -eq 200) {
             return
         }

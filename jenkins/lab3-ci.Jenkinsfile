@@ -30,8 +30,10 @@ pipeline {
     environment {
         VENV_DIR = '.venv'
         LOCAL_API_IMAGE = 'wine-quality-mlops:local'
-        COVERAGE_FILE = 'coverage.xml'
         FUNCTIONAL_REPORT = 'functional-test-report.json'
+        POSTGRES_HOST_PORT = '15433'
+        VAULT_HOST_PORT = '18200'
+        API_HOST_PORT = '18000'
     }
 
     stages {
@@ -84,7 +86,12 @@ if (-not (Test-Path .venv/Scripts/python.exe)) {
             steps {
                 script {
                     inRepoWorkspace {
-                        powershell '& "./.venv/Scripts/pytest.exe" --cov=src/wine_quality_mlops --cov-report=xml --cov-report=term-missing'
+                        powershell '''
+if (Test-Path coverage.xml) {
+    Remove-Item coverage.xml -Force
+}
+& "./.venv/Scripts/pytest.exe" --cov=src/wine_quality_mlops --cov-report=xml --cov-report=term-missing
+'''
                     }
                 }
             }
@@ -121,6 +128,7 @@ if ($LASTEXITCODE -ne 0) {
                 script {
                     inRepoWorkspace {
                         powershell '''
+docker compose down -v --remove-orphans
 docker compose up -d postgres vault
 docker compose --profile seed run --rm db-seed
 '''
@@ -139,7 +147,7 @@ docker compose up -d api
 
 for ($attempt = 0; $attempt -lt 20; $attempt++) {
     try {
-        $response = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/health' -UseBasicParsing -TimeoutSec 10
+        $response = Invoke-WebRequest -Uri "http://127.0.0.1:$env:API_HOST_PORT/health" -UseBasicParsing -TimeoutSec 10
         if ($response.StatusCode -eq 200) {
             break
         }

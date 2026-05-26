@@ -30,8 +30,11 @@ pipeline {
     environment {
         VENV_DIR = '.venv'
         LOCAL_API_IMAGE = 'wine-quality-mlops:local'
-        COVERAGE_FILE = 'coverage.xml'
         FUNCTIONAL_REPORT = 'functional-test-report.json'
+        POSTGRES_HOST_PORT = '16433'
+        VAULT_HOST_PORT = '18201'
+        KAFKA_HOST_PORT = '19092'
+        API_HOST_PORT = '18001'
     }
 
     stages {
@@ -84,7 +87,12 @@ if (-not (Test-Path .venv/Scripts/python.exe)) {
             steps {
                 script {
                     inRepoWorkspace {
-                        powershell '& "./.venv/Scripts/pytest.exe" --cov=src/wine_quality_mlops --cov-report=xml --cov-report=term-missing'
+                        powershell '''
+if (Test-Path coverage.xml) {
+    Remove-Item coverage.xml -Force
+}
+& "./.venv/Scripts/pytest.exe" --cov=src/wine_quality_mlops --cov-report=xml --cov-report=term-missing
+'''
                     }
                 }
             }
@@ -120,7 +128,10 @@ if ($LASTEXITCODE -ne 0) {
             steps {
                 script {
                     inRepoWorkspace {
-                        powershell 'docker compose up -d postgres vault kafka api kafka-consumer'
+                        powershell '''
+docker compose down -v --remove-orphans
+docker compose up -d postgres vault kafka api kafka-consumer
+'''
                     }
                 }
             }
