@@ -11,7 +11,7 @@ def inRepoWorkspace(Closure body) {
 
 
 pipeline {
-    agent any
+    agent { label 'windows' }
 
     options {
         timestamps()
