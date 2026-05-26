@@ -10,8 +10,8 @@ stages:
       size: 241
     - path: data/raw/winequality-red.csv
       hash: md5
-      md5: 2daeecee174368f8a33b82c8cccae3a5
-      size: 84199
+      md5: c676cfbc07d4640f4ecb764a102cad01
+      size: 85799
     - path: scripts/prepare_data.py
       hash: md5
       md5: ace59749b95b9fa977860a0dceef2213
@@ -77,13 +77,13 @@ stages:
     outs:
     - path: artifacts/metrics.json
       hash: md5
-      md5: 0c0281916b5a58f90de1a70713200544
+      md5: 2efbb4ef7777bcc4fc127f9831b5d2ff
       size: 204
     - path: artifacts/model.joblib
       hash: md5
-      md5: 7a423324aeb1c5719b1fe28a9d2f9f41
-      size: 7740641
+      md5: 08501314c9e9537ae67f2d71656a4979
+      size: 7740561
     - path: artifacts/model_metadata.json
       hash: md5
-      md5: aca9dee1275d36db10e08352c642b785
+      md5: c8fd27c27e1e72a6b4f62133ee2aed99
       size: 409

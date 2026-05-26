@@ -6,12 +6,13 @@ ENV PYTHONPATH=/app/src
 
 WORKDIR /app
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.txt
+COPY requirements.runtime.txt ./
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -r requirements.runtime.txt
 
 COPY config.ini ./
 COPY dvc.yaml ./
 COPY scenario.json ./
+COPY scenario_lab3.json ./
 COPY scripts ./scripts
 COPY src ./src
 COPY tests ./tests

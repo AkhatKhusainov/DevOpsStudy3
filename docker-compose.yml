@@ -1,16 +1,89 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wine_quality
+      POSTGRES_USER: wine_user
+      POSTGRES_PASSWORD: wine_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "PGPASSWORD=$$POSTGRES_PASSWORD psql -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB -c 'SELECT 1' >/dev/null"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  vault:
+    build:
+      context: .
+      dockerfile: docker/vault/Dockerfile
+    image: wine-quality-vault:local
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=root vault kv get secret/wine-quality/database >/dev/null 2>&1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: .
     image: wine-quality-mlops:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
       MODEL_PATH: /app/artifacts/model.joblib
       METADATA_PATH: /app/artifacts/model_metadata.json
       METRICS_PATH: /app/artifacts/metrics.json
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: root
+      VAULT_SECRET_PATH: secret/data/wine-quality/database
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 15s
       timeout: 5s
       retries: 5
+
+  db-seed:
+    profiles: ["seed"]
+    image: wine-quality-mlops:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: root
+      VAULT_SECRET_PATH: secret/data/wine-quality/database
+    command:
+      [
+        "python",
+        "scripts/seed_database.py",
+        "--train-path",
+        "/app/data/processed/train.csv",
+        "--test-path",
+        "/app/data/processed/test.csv"
+      ]
+    restart: "no"
+
+volumes:
+  postgres_data:

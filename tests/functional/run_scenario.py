@@ -14,6 +14,7 @@ def execute_step(
     step: dict[str, object],
     retries: int,
     retry_delay: float,
+    session: requests.Session,
 ) -> dict[str, object]:
     method = str(step["method"]).upper()
     path = str(step["path"])
@@ -22,7 +23,7 @@ def execute_step(
 
     for attempt in range(retries):
         try:
-            response = requests.request(method, url, json=step.get("json"), timeout=15)
+            response = session.request(method, url, json=step.get("json"), timeout=15)
             response_body: object
 
             try:
@@ -79,10 +80,12 @@ def main() -> None:
 
     results: list[dict[str, object]] = []
     overall_status = "passed"
+    session = requests.Session()
+    session.trust_env = False
 
     try:
         for step in scenario["steps"]:
-            results.append(execute_step(base_url, step, args.retries, args.retry_delay))
+            results.append(execute_step(base_url, step, args.retries, args.retry_delay, session))
     except Exception as error:  # noqa: BLE001
         overall_status = "failed"
         results.append({"name": "failure", "error": str(error)})
@@ -98,6 +101,7 @@ def main() -> None:
         encoding="utf-8",
     )
     print(json.dumps({"status": overall_status, "results": results}, indent=2))
+    session.close()
 
 
 if __name__ == "__main__":

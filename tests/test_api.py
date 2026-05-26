@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sklearn.ensemble import RandomForestRegressor
 
 from wine_quality_mlops.app import create_app
+from wine_quality_mlops.database import SqlAlchemyPredictionStore
 from wine_quality_mlops.predict import ModelService
 from wine_quality_mlops.schema import ALL_COLUMNS, FEATURE_COLUMNS, TARGET_COLUMN
 
@@ -17,6 +18,7 @@ def test_api_predict_endpoint_returns_prediction(tmp_path: Path) -> None:
     model_path = tmp_path / "model.joblib"
     metadata_path = tmp_path / "model_metadata.json"
     metrics_path = tmp_path / "metrics.json"
+    database_path = tmp_path / "predictions.db"
 
     frame = pd.DataFrame(
         [
@@ -48,8 +50,12 @@ def test_api_predict_endpoint_returns_prediction(tmp_path: Path) -> None:
     metrics_path.write_text(json.dumps({"mae": 0.1, "rmse": 0.2, "r2": 0.7}), encoding="utf-8")
 
     service = ModelService.from_paths(model_path, metadata_path, metrics_path)
+    prediction_store = SqlAlchemyPredictionStore(f"sqlite:///{database_path.as_posix()}")
+    prediction_store.ensure_schema()
+    prediction_store.replace_samples("train", frame.to_dict(orient="records"))
+    prediction_store.replace_samples("test", frame.to_dict(orient="records"))
 
-    with TestClient(create_app(service)) as client:
+    with TestClient(create_app(service, prediction_store=prediction_store)) as client:
         response = client.post(
             "/predict",
             json={
@@ -66,9 +72,24 @@ def test_api_predict_endpoint_returns_prediction(tmp_path: Path) -> None:
                 "alcohol": 9.4,
             },
         )
+        latest_prediction_response = client.get("/predictions/latest")
+        dataset_summary_response = client.get("/training-data/summary")
+        health_response = client.get("/health")
 
-        assert client.get("/health").status_code == 200
+        assert health_response.status_code == 200
+        assert health_response.json()["database_status"] == {"enabled": True, "connected": True}
         assert response.status_code == 200
         payload = response.json()
         assert "predicted_quality" in payload
         assert payload["model_version"] == "0.1.0"
+        assert payload["stored_in_db"] is True
+        assert isinstance(payload["prediction_id"], int)
+
+        assert latest_prediction_response.status_code == 200
+        latest_payload = latest_prediction_response.json()
+        assert latest_payload["prediction_id"] == payload["prediction_id"]
+        assert latest_payload["model_version"] == "0.1.0"
+        assert latest_payload["request_payload"]["alcohol"] == 9.4
+
+        assert dataset_summary_response.status_code == 200
+        assert dataset_summary_response.json()["splits"] == {"test": 6, "train": 6}
