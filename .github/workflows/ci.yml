@@ -1,4 +1,4 @@
-name: CI
+name: Lab3 CI
 
 on:
   pull_request:
@@ -41,7 +41,7 @@ jobs:
           fi
 
       - name: Build Docker image
-        run: docker build -t wine-quality-mlops:${{ steps.image_meta.outputs.tag }} -t wine-quality-mlops:latest .
+        run: docker build -t wine-quality-mlops-lab3:${{ steps.image_meta.outputs.tag }} -t wine-quality-mlops-lab3:latest .
 
       - name: Login to DockerHub
         if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
@@ -53,18 +53,18 @@ jobs:
       - name: Push Docker image
         if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
         run: |
-          docker tag wine-quality-mlops:${{ steps.image_meta.outputs.tag }} ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops:${{ steps.image_meta.outputs.tag }}
-          docker tag wine-quality-mlops:latest ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops:latest
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops:${{ steps.image_meta.outputs.tag }}
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops:latest
+          docker tag wine-quality-mlops-lab3:${{ steps.image_meta.outputs.tag }} ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops-lab3:${{ steps.image_meta.outputs.tag }}
+          docker tag wine-quality-mlops-lab3:latest ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops-lab3:latest
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops-lab3:${{ steps.image_meta.outputs.tag }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops-lab3:latest
 
       - name: Generate dev_sec_ops metadata
-        run: python scripts/generate_dev_sec_ops.py --image-ref wine-quality-mlops:${{ steps.image_meta.outputs.tag }} --coverage-xml coverage.xml --output dev_sec_ops.yml
+        run: python scripts/generate_dev_sec_ops.py --image-ref wine-quality-mlops-lab3:${{ steps.image_meta.outputs.tag }} --coverage-xml coverage.xml --output dev_sec_ops.yml
 
       - name: Upload CI artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ci-artifacts
+          name: lab3-ci-artifacts
           path: |
             coverage.xml
             dev_sec_ops.yml

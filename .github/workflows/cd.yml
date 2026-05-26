@@ -1,4 +1,4 @@
-name: CD
+name: Lab3 CD
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   workflow_run:
-    workflows: ["CI"]
+    workflows: ["Lab3 CI"]
     types:
       - completed
 
@@ -18,6 +18,9 @@ jobs:
   functional-tests:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+
+    env:
+      LOCAL_API_IMAGE: wine-quality-mlops:local
 
     steps:
       - name: Checkout repository
@@ -42,11 +45,22 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Pull image
-        run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops:${{ steps.image_meta.outputs.tag }}
+        run: docker pull ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops-lab3:${{ steps.image_meta.outputs.tag }}
 
-      - name: Run container
+      - name: Retag image for compose
         run: |
-          docker run -d --rm --name wine-quality-mlops -p 8000:8000 ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops:${{ steps.image_meta.outputs.tag }}
+          docker tag ${{ secrets.DOCKERHUB_USERNAME }}/wine-quality-mlops-lab3:${{ steps.image_meta.outputs.tag }} $LOCAL_API_IMAGE
+
+      - name: Build Vault image
+        run: docker compose build vault
+
+      - name: Start compose stack
+        run: |
+          docker compose down -v --remove-orphans
+          docker compose up -d postgres vault kafka api
+
+      - name: Seed PostgreSQL
+        run: docker compose --profile seed run --rm db-seed
 
       - name: Wait for API health
         shell: bash
@@ -60,23 +74,26 @@ jobs:
           exit 1
 
       - name: Run scenario inside container
-        run: docker exec wine-quality-mlops python tests/functional/run_scenario.py --scenario /app/scenario.json --base-url http://127.0.0.1:8000 --report /app/artifacts/functional-test-report.json
+        run: docker compose exec -T api python tests/functional/run_scenario.py --scenario /app/scenario_lab3.json --base-url http://127.0.0.1:8000 --report /app/artifacts/functional-test-report.json
 
       - name: Copy scenario report
         if: always()
-        run: docker cp wine-quality-mlops:/app/artifacts/functional-test-report.json functional-test-report.json
+        shell: bash
+        run: |
+          container_id=$(docker compose ps -q api)
+          docker cp "$container_id:/app/artifacts/functional-test-report.json" functional-test-report.json
 
       - name: Upload CD artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cd-functional-report
+          name: lab3-cd-functional-report
           path: functional-test-report.json
 
-      - name: Show container logs
+      - name: Show compose logs
         if: always()
-        run: docker logs wine-quality-mlops
+        run: docker compose logs
 
-      - name: Stop container
+      - name: Stop compose stack
         if: always()
-        run: docker stop wine-quality-mlops
+        run: docker compose down -v
