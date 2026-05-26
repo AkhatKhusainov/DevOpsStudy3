@@ -13,6 +13,7 @@ COPY config.ini ./
 COPY dvc.yaml ./
 COPY scenario.json ./
 COPY scenario_lab3.json ./
+COPY scenario_lab4.json ./
 COPY scripts ./scripts
 COPY src ./src
 COPY tests ./tests

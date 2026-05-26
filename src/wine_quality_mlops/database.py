@@ -31,6 +31,19 @@ class PredictionResultRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
 
 
+class PredictionEventRecord(Base):
+    __tablename__ = "prediction_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    prediction_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    model_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    predicted_quality: Mapped[float] = mapped_column(Float, nullable=False)
+    request_payload: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+
+
 class WineSampleRecord(Base):
     __tablename__ = "wine_samples"
 
@@ -63,6 +76,18 @@ class StoredPrediction:
     created_at: str
 
 
+@dataclass(frozen=True)
+class StoredPredictionEvent:
+    id: int
+    event_id: str
+    prediction_id: int | None
+    predicted_quality: float
+    model_version: str
+    request_payload: dict[str, float]
+    published_at: str
+    consumed_at: str
+
+
 class PredictionStore(Protocol):
     @property
     def enabled(self) -> bool:
@@ -83,6 +108,21 @@ class PredictionStore(Protocol):
         ...
 
     def get_latest_prediction(self) -> StoredPrediction | None:
+        ...
+
+    def save_prediction_event(
+        self,
+        *,
+        event_id: str,
+        prediction_id: int | None,
+        request_payload: dict[str, float],
+        prediction: float,
+        model_version: str,
+        published_at: str,
+    ) -> StoredPredictionEvent | None:
+        ...
+
+    def get_latest_prediction_event(self) -> StoredPredictionEvent | None:
         ...
 
     def replace_samples(self, split_name: str, samples: list[dict[str, float]]) -> int:
@@ -112,6 +152,21 @@ class NullPredictionStore:
         return None
 
     def get_latest_prediction(self) -> StoredPrediction | None:
+        return None
+
+    def save_prediction_event(
+        self,
+        *,
+        event_id: str,
+        prediction_id: int | None,
+        request_payload: dict[str, float],
+        prediction: float,
+        model_version: str,
+        published_at: str,
+    ) -> StoredPredictionEvent | None:
+        return None
+
+    def get_latest_prediction_event(self) -> StoredPredictionEvent | None:
         return None
 
     def replace_samples(self, split_name: str, samples: list[dict[str, float]]) -> int:
@@ -167,6 +222,43 @@ class SqlAlchemyPredictionStore:
                 return None
             return _to_stored_prediction(record)
 
+    def save_prediction_event(
+        self,
+        *,
+        event_id: str,
+        prediction_id: int | None,
+        request_payload: dict[str, float],
+        prediction: float,
+        model_version: str,
+        published_at: str,
+    ) -> StoredPredictionEvent:
+        with self._session_factory() as session:
+            existing_record = session.scalar(
+                select(PredictionEventRecord).where(PredictionEventRecord.event_id == event_id).limit(1)
+            )
+            if existing_record is not None:
+                return _to_stored_prediction_event(existing_record)
+
+            record = PredictionEventRecord(
+                event_id=event_id,
+                prediction_id=prediction_id,
+                model_version=model_version,
+                predicted_quality=prediction,
+                request_payload=request_payload,
+                published_at=_parse_datetime(published_at),
+            )
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+            return _to_stored_prediction_event(record)
+
+    def get_latest_prediction_event(self) -> StoredPredictionEvent | None:
+        with self._session_factory() as session:
+            record = session.scalar(select(PredictionEventRecord).order_by(PredictionEventRecord.id.desc()).limit(1))
+            if record is None:
+                return None
+            return _to_stored_prediction_event(record)
+
     def replace_samples(self, split_name: str, samples: list[dict[str, float]]) -> int:
         with self._session_factory() as session:
             session.execute(delete(WineSampleRecord).where(WineSampleRecord.split_name == split_name))
@@ -192,6 +284,26 @@ def _to_stored_prediction(record: PredictionResultRecord) -> StoredPrediction:
         request_payload=dict(record.request_payload),
         created_at=record.created_at.astimezone(timezone.utc).isoformat(),
     )
+
+
+def _to_stored_prediction_event(record: PredictionEventRecord) -> StoredPredictionEvent:
+    return StoredPredictionEvent(
+        id=record.id,
+        event_id=record.event_id,
+        prediction_id=record.prediction_id,
+        predicted_quality=record.predicted_quality,
+        model_version=record.model_version,
+        request_payload=dict(record.request_payload),
+        published_at=record.published_at.astimezone(timezone.utc).isoformat(),
+        consumed_at=record.consumed_at.astimezone(timezone.utc).isoformat(),
+    )
+
+
+def _parse_datetime(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def build_database_url_from_env(required: bool = False) -> str | None:

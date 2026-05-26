@@ -45,11 +45,17 @@ def load_secret_from_vault(address: str, token: str, secret_path: str, timeout_s
     return _normalize_secret_payload(payload)
 
 
-def load_secret_from_vault_env(required: bool = False) -> dict[str, str] | None:
+def load_secret_from_vault_env(
+    required: bool = False,
+    *,
+    address_env: str = "VAULT_ADDR",
+    token_env: str = "VAULT_TOKEN",
+    secret_path_env: str = "VAULT_SECRET_PATH",
+) -> dict[str, str] | None:
     env = os.environ
-    address = env.get("VAULT_ADDR")
-    token = env.get("VAULT_TOKEN")
-    secret_path = env.get("VAULT_SECRET_PATH")
+    address = env.get(address_env)
+    token = env.get(token_env)
+    secret_path = env.get(secret_path_env)
 
     configured = any((address, token, secret_path))
     if not configured:
@@ -58,9 +64,9 @@ def load_secret_from_vault_env(required: bool = False) -> dict[str, str] | None:
     missing = [
         key
         for key, value in (
-            ("VAULT_ADDR", address),
-            ("VAULT_TOKEN", token),
-            ("VAULT_SECRET_PATH", secret_path),
+            (address_env, address),
+            (token_env, token),
+            (secret_path_env, secret_path),
         )
         if not value
     ]

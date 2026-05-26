@@ -10,8 +10,24 @@ from sklearn.ensemble import RandomForestRegressor
 
 from wine_quality_mlops.app import create_app
 from wine_quality_mlops.database import SqlAlchemyPredictionStore
+from wine_quality_mlops.messaging import PredictionEvent
 from wine_quality_mlops.predict import ModelService
 from wine_quality_mlops.schema import ALL_COLUMNS, FEATURE_COLUMNS, TARGET_COLUMN
+
+
+class _FakePredictionPublisher:
+    def __init__(self) -> None:
+        self.published_events: list[PredictionEvent] = []
+
+    @property
+    def enabled(self) -> bool:
+        return True
+
+    def healthcheck(self) -> dict[str, bool]:
+        return {"enabled": True, "connected": True}
+
+    def publish_prediction(self, event: PredictionEvent) -> None:
+        self.published_events.append(event)
 
 
 def test_api_predict_endpoint_returns_prediction(tmp_path: Path) -> None:
@@ -51,11 +67,14 @@ def test_api_predict_endpoint_returns_prediction(tmp_path: Path) -> None:
 
     service = ModelService.from_paths(model_path, metadata_path, metrics_path)
     prediction_store = SqlAlchemyPredictionStore(f"sqlite:///{database_path.as_posix()}")
+    prediction_publisher = _FakePredictionPublisher()
     prediction_store.ensure_schema()
     prediction_store.replace_samples("train", frame.to_dict(orient="records"))
     prediction_store.replace_samples("test", frame.to_dict(orient="records"))
 
-    with TestClient(create_app(service, prediction_store=prediction_store)) as client:
+    with TestClient(
+        create_app(service, prediction_store=prediction_store, prediction_publisher=prediction_publisher)
+    ) as client:
         response = client.post(
             "/predict",
             json={
@@ -78,12 +97,16 @@ def test_api_predict_endpoint_returns_prediction(tmp_path: Path) -> None:
 
         assert health_response.status_code == 200
         assert health_response.json()["database_status"] == {"enabled": True, "connected": True}
+        assert health_response.json()["kafka_status"] == {"enabled": True, "connected": True}
         assert response.status_code == 200
         payload = response.json()
         assert "predicted_quality" in payload
         assert payload["model_version"] == "0.1.0"
         assert payload["stored_in_db"] is True
+        assert payload["published_to_kafka"] is True
         assert isinstance(payload["prediction_id"], int)
+        assert len(prediction_publisher.published_events) == 1
+        assert prediction_publisher.published_events[0].request_payload["alcohol"] == 9.4
 
         assert latest_prediction_response.status_code == 200
         latest_payload = latest_prediction_response.json()

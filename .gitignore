@@ -12,3 +12,11 @@ data/processed/
 *.pyc
 *.pyo
 *.pyd
+docker/.trackid
+docker/*.dat
+docker/features-overrides.json
+docker/locked-directories
+docker/login-info.json
+docker/settings-store.json
+docker/unleash-v2-docker-desktop.json
+docker/extensions/

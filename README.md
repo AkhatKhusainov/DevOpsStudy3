@@ -9,6 +9,8 @@
 - API-сервис на FastAPI с методами `/predict`, `/predictions/latest`, `/training-data/summary`;
 - PostgreSQL для хранения предсказаний и обучающей выборки;
 - HashiCorp Vault как отдельный контейнер для хранения секретов БД;
+- Kafka producer в API и отдельный Kafka consumer-контейнер для сохранения событий предсказаний;
+- endpoint `/prediction-events/latest` для проверки последнего обработанного Kafka event;
 - unit и API tests на `pytest`;
 - DVC pipeline для этапов `prepare` и `train`;
 - Docker image и `docker-compose.yml`;
@@ -62,6 +64,14 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 python tests/functional/run_scenario.py --scenario scenario_lab3.json --base-url http://127.0.0.1:8000 --report functional-test-report.json
 ```
 
+Lab4 со стеком Kafka:
+
+```powershell
+docker compose up -d --build postgres vault kafka api kafka-consumer
+docker compose --profile seed run --rm db-seed
+docker compose exec -T api python tests/functional/run_scenario.py --scenario /app/scenario_lab4.json --base-url http://127.0.0.1:8000 --report /app/artifacts/functional-test-report.json
+```
+
 Остановить стенд:
 
 ```powershell
@@ -73,6 +83,15 @@ docker compose down -v
 - `vault` поднимается как отдельный контейнер и сам заполняет секрет `secret/wine-quality/database`;
 - `api` и `db-seed` получают только `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_SECRET_PATH` и читают креды БД из Vault;
 - `postgres` хранит таблицы `prediction_results` и `wine_samples`.
+
+Что происходит в Lab4-стеке:
+
+- `vault` дополнительно создает секрет `secret/wine-quality/kafka` с `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_PREDICTIONS_TOPIC` и `KAFKA_CONSUMER_GROUP`;
+- `api` сохраняет результат предсказания в PostgreSQL и публикует `PredictionEvent` в Kafka;
+- `kafka-consumer` читает сообщения из Kafka и пишет их в таблицу `prediction_events` через тот же Vault-backed доступ к БД;
+- сценарий `scenario_lab4.json` проверяет не только `/predict` и `/predictions/latest`, но и `/prediction-events/latest`.
+
+Для локального Windows-стенда надежнее запускать `scenario_lab4.json` изнутри контейнера `api`, как в команде выше. Это убирает зависимость от занятого хостового порта `127.0.0.1:8000`.
 
 ## Vault
 
@@ -103,6 +122,11 @@ docker compose exec vault vault kv get secret/wine-quality/database
 - `jenkins/lab3-ci.Jenkinsfile`
 - `jenkins/lab3-cd.Jenkinsfile`
 
+Для Lab4 с Kafka добавлены отдельные pipeline файлы:
+
+- `jenkins/lab4-ci.Jenkinsfile`
+- `jenkins/lab4-cd.Jenkinsfile`
+
 Как создавать jobs в Jenkins:
 
 - Job type: `Pipeline`
@@ -110,6 +134,11 @@ docker compose exec vault vault kv get secret/wine-quality/database
 - SCM: `Git`
 - Script Path для CI: `jenkins/lab3-ci.Jenkinsfile`
 - Script Path для CD: `jenkins/lab3-cd.Jenkinsfile`
+
+Для Lab4 создай отдельные Jenkins jobs с `Script Path`:
+
+- CI: `jenkins/lab4-ci.Jenkinsfile`
+- CD: `jenkins/lab4-cd.Jenkinsfile`
 
 Что делает Jenkins CI pipeline:
 
@@ -125,6 +154,11 @@ docker compose exec vault vault kv get secret/wine-quality/database
 - при необходимости подтягивает заранее собранный API image;
 - приводит его к локальному тегу `wine-quality-mlops:local`, который использует compose;
 - собирает `vault`, поднимает весь Lab3-стек и повторно гоняет `scenario_lab3.json`.
+
+Что делают Jenkins Lab4 pipelines:
+
+- `lab4-ci` прогоняет `dvc repro`, `pytest`, собирает `api` и `vault`, поднимает `postgres + vault + kafka + api + kafka-consumer`, выполняет `db-seed`, запускает `scenario_lab4.json` внутри контейнера `api`, затем при необходимости пушит Docker image и триггерит `lab4-cd`;
+- `lab4-cd` подготавливает или подтягивает нужный API image, собирает `vault`, поднимает Lab4-стек и заново прогоняет `scenario_lab4.json` внутри контейнера `api`.
 
 Если Jenkins работает на той же машине, что и Docker Desktop, дополнительных секретов БД для job не нужно: Vault сам поднимается в dev-режиме и сам же создает секрет `secret/wine-quality/database`.
 

@@ -24,4 +24,9 @@ vault kv put secret/wine-quality/database \
   DATABASE_PASSWORD=wine_password \
   DATABASE_DRIVER=postgresql+psycopg
 
+vault kv put secret/wine-quality/kafka \
+  KAFKA_BOOTSTRAP_SERVERS=kafka:19092 \
+  KAFKA_PREDICTIONS_TOPIC=wine-quality.predictions \
+  KAFKA_CONSUMER_GROUP=wine-quality-consumer
+
 wait "$vault_pid"
